@@ -16,7 +16,7 @@ func reposityList() -> NSMutableArray {
         
     } else {
         var fileUrl =  NSURL.fileURL(withPath: FileManager.default.currentDirectoryPath)
-        var fileUrl = fileUrl.appendingPathComponent(config_json_file)
+        fileUrl = fileUrl.appendingPathComponent(config_json_file)
         if let savedArray = NSMutableArray.init(contentsOf: fileUrl) {
             repositories = savedArray
         } else {
@@ -114,7 +114,7 @@ func addRepository(path: String, folder: String) {
         list.add(rep)
         repositories = list
         var fileUrl =  NSURL.fileURL(withPath: FileManager.default.currentDirectoryPath)
-        fileUrl.appendingPathComponent(config_json_file)
+        fileUrl = fileUrl.appendingPathComponent(config_json_file)
         repositories!.write(to: fileUrl, atomically: true)
     }
 }
