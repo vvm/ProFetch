@@ -2,22 +2,29 @@
 
 import Foundation
 
+// repository data file
 let config_json_file = "config.json"
 
+// repository info key
 let RepositoryPathKey = "path"
 let RepositoryFolderKey = "folder"
 
+// repostory memeory data
 var repositories: NSMutableArray?
 var repository: NSMutableDictionary?
 
-// 得到json中的仓库列表
+func configFileURL() -> URL {
+    var fileUrl =  NSURL.fileURL(withPath: FileManager.default.currentDirectoryPath)
+    fileUrl = fileUrl.appendingPathComponent(config_json_file)
+    return fileUrl
+}
+
+/*
+ get all reposities from config file
+ */
 func reposityList() -> NSMutableArray {
-    if let _ = repositories {
-        
-    } else {
-        var fileUrl =  NSURL.fileURL(withPath: FileManager.default.currentDirectoryPath)
-        fileUrl = fileUrl.appendingPathComponent(config_json_file)
-        if let savedArray = NSMutableArray.init(contentsOf: fileUrl) {
+    if repositories == nil {
+        if let savedArray = NSMutableArray.init(contentsOf: configFileURL()) {
             repositories = savedArray
         } else {
             repositories = NSMutableArray.init()
@@ -27,6 +34,9 @@ func reposityList() -> NSMutableArray {
     return repositories!
 }
 
+/*
+ verify git repostory address
+ */
 func checkGitPath(path: String) -> String {
     if path.hasSuffix(".git") {
         return path
@@ -35,33 +45,35 @@ func checkGitPath(path: String) -> String {
     exit(0)
 }
 
+/**/
 func checkFolderPath(path: String, folder: String?) -> String {
     if let folderPath = folder {
         var isDir : ObjCBool = false
         if FileManager.default.fileExists(atPath: folderPath, isDirectory: &isDir) && isDir.boolValue {
+            if !folderPath.hasPrefix("/") {
+                return (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent(folderPath)
+            }
             return folderPath
         }
         print("Folder not exist")
         exit(0)
     } else {
-        return "."
+        return FileManager.default.currentDirectoryPath
     }
 }
 
-func showHelp(){
-    print("this is a help")
-}
-
-func showRepositories(){
-    print("this is a help")
-}
-
-func runCommand(cmd : String, args : String...) -> (output: [String], error: [String], exitCode: Int32) {
+/*
+ execute shell command
+ */
+func runCommand(path: String?, cmd : String, args : String...) -> (output: [String], error: [String], exitCode: Int32) {
     
     var output : [String] = []
     var error : [String] = []
     
     let task = Process()
+    if let _ = path {
+        task.currentDirectoryPath = path!
+    }
     task.launchPath = cmd
     task.arguments = args
     
@@ -90,15 +102,37 @@ func runCommand(cmd : String, args : String...) -> (output: [String], error: [St
     return (output, error, status)
 }
 
+/*
+ for h
+ show help info
+ */
+func showHelp(){
+    print("this is a help")
+}
+
+/*
+ for l
+ show all repositories
+ */
+func showRepositories(){
+    for repostory in reposityList() {
+        print("\((repostory as! NSDictionary)[RepositoryFolderKey]!):\t\((repostory as! NSDictionary)[RepositoryPathKey]!)\n")
+    }
+}
+
+/*
+ for add
+ add new repository
+ */
 func addRepository(path: String, folder: String) {
-    var pathString: NSString = path as! NSString
-    pathString = pathString.lastPathComponent as! NSString
-    pathString = pathString.deletingPathExtension as! NSString
+    var pathString: NSString = path as NSString
+    pathString = pathString.lastPathComponent as NSString
+    pathString = pathString.deletingPathExtension as NSString
     
-    pathString = (folder as! NSString).appendingPathComponent(pathString as! String) as! NSString
+    pathString = (folder as NSString).appendingPathComponent(pathString as String) as NSString
     
     print("git clone \(path) \(folder)")
-    let (output, error, status) = runCommand(cmd: "/usr/bin/git",args:"clone", path, pathString as! String)
+    let (_, error, status) = runCommand(path: nil, cmd: "/usr/bin/git",args:"clone", path, pathString as String)
     if status != 0 {
         print("\n\t\tgot error:\n")
         for s in error {
@@ -106,32 +140,52 @@ func addRepository(path: String, folder: String) {
         }
         print("\n\n")
     } else {
-        var list = reposityList()
-        var rep = [
+        let list = reposityList()
+        let rep = [
             RepositoryPathKey: path,
-            RepositoryFolderKey: folder
-            ] as! NSDictionary
+            RepositoryFolderKey: (folder as NSString).appendingPathComponent(((path as NSString).lastPathComponent as NSString).deletingPathExtension)
+            ] as NSDictionary
         list.add(rep)
         repositories = list
-        var fileUrl =  NSURL.fileURL(withPath: FileManager.default.currentDirectoryPath)
-        fileUrl = fileUrl.appendingPathComponent(config_json_file)
-        repositories!.write(to: fileUrl, atomically: true)
+        repositories!.write(to: configFileURL(), atomically: true)
     }
 }
 
-func syncRepository(path: String) {
-    
+/*
+ for s
+ sync special repository
+ */
+func syncRepository(path: String) -> Bool {
+    let (output, error, status) = runCommand(path: path, cmd: "/usr/bin/git",args:"pull", "--all")
+    if status != 0 {
+        print("\n\t\tgot error:\n")
+        for s in error {
+            print("\t\t\(s)")
+        }
+        print("\n\n")
+        return false
+    }
+    return true
 }
 
+/*
+ for s all
+ sync all repositories
+ */
 func syncAll() {
     
 }
 
-if (CommandLine.arguments[1] == "add") {
+// =========
+// main code
+// =========
+
+if (CommandLine.arguments[1] == "add") { // check if arguments contain add
     var path = ""
     var folder = ""
     if CommandLine.argc == 2 {
-        
+        print("No enough arguments")
+        exit(0)
     } else if CommandLine.argc == 3 {
         path = checkGitPath(path: CommandLine.arguments[2])
         folder = checkFolderPath(path: CommandLine.arguments[2], folder: nil)
@@ -141,7 +195,6 @@ if (CommandLine.arguments[1] == "add") {
     }
     
     addRepository(path: path, folder: folder)
-    
 } else {
     while case let option = getopt(CommandLine.argc, CommandLine.unsafeArgv, "hlr:ps:"), option != -1 {
         switch UnicodeScalar(CUnsignedChar(option)) {
@@ -154,7 +207,13 @@ if (CommandLine.arguments[1] == "add") {
             break
         case "p":
             break
-        case "s": // 同步
+        case "s": // sync
+            if strlen(optarg) > 0 {
+                let oa = String(cString: optarg)
+                syncRepository(path: oa)
+            } else {
+                print("xxxxxxxxxxx123")
+            }
             break
         default:
             print("\(optind) is \(optarg)")
